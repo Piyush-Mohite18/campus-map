@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Campus Navigation</title>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.css" rel="stylesheet" />
+    <style>
+        #map { width: 100%; height: 500px; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+    
+    <div id="controls">
+        <label for="destination">Select Destination:</label>
+        <select id="destination">
+            <option value="73.88367516423422,18.459181351404517">Building 2</option>
+            <option value="73.8835843028105,18.460288315096374">Main Building</option>
+            <option value="73.88416703777891,18.458350387535205">Building 4</option>
+            <option value="73.88385830208395,18.457996621351942">Building 5</option>
+            <option value="73.88390385295752,18.457775500169415">Basketball Court</option>
+            <option value="73.88390653242094,18.457495921254193">Playground</option>
+            <option value="73.88407773451284,18.45874112469597">Building 3</option>
+            <option value="73.88411692573803,18.458480900120453">Canteen</option>
+        </select>
+
+        <button onclick="updateRoute()">Start Navigation</button>
+    </div>
+
+    <script>
+        mapboxgl.accessToken = 'pk.eyJ1IjoidmVkYW50b20iLCJhIjoiY202bWEweDMwMGV2YzJrczRlZ2JtYWZibSJ9.LC_mF9gyUu5vBXuot8FQWQ';
+
+        let map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/streets-v11',
+            center: [73.88367516423422, 18.459181351404517], // Default to VIT Pune
+            zoom: 17
+        });
+
+        let userMarker = new mapboxgl.Marker({ color: "blue" }); // User's location marker
+        let destinationMarker;
+        let routeLayerAdded = false;
+
+        // Track user’s live location
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(position => {
+                const userCoords = [position.coords.longitude, position.coords.latitude];
+
+                // Update user marker position
+                userMarker.setLngLat(userCoords).addTo(map);
+
+                // Move map with user (smooth experience)
+                map.flyTo({ center: userCoords, zoom: 17 });
+
+            }, error => {
+                console.error("Error getting location:", error);
+            }, {
+                enableHighAccuracy: true
+            });
+        } else {
+            console.error("Geolocation is not supported by this browser.");
+        }
+
+        function updateRoute() {
+            const destinationCoords = document.getElementById("destination").value.split(",");
+
+            // Add or update destination marker
+            if (destinationMarker) {
+                destinationMarker.setLngLat(destinationCoords);
+            } else {
+                destinationMarker = new mapboxgl.Marker({ color: "red" })
+                    .setLngLat(destinationCoords)
+                    .addTo(map);
+            }
+
+            fetch(`https://api.mapbox.com/directions/v5/mapbox/walking/${userMarker.getLngLat().lng},${userMarker.getLngLat().lat};${destinationCoords[0]},${destinationCoords[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`)
+            .then(response => response.json())
+            .then(data => {
+                const routeCoordinates = data.routes[0].geometry.coordinates;
+
+                // Remove previous route if it exists
+                if (routeLayerAdded) {
+                    map.removeLayer('route-line');
+                    map.removeSource('route');
+                }
+
+                // Add new route
+                map.addSource('route', {
+                    type: 'geojson',
+                    data: {
+                        type: 'Feature',
+                        geometry: {
+                            type: 'LineString',
+                            coordinates: routeCoordinates
+                        }
+                    }
+                });
+
+                map.addLayer({
+                    id: 'route-line',
+                    type: 'line',
+                    source: 'route',
+                    layout: { 'line-join': 'round', 'line-cap': 'round' },
+                    paint: { 'line-color': '#007cbf', 'line-width': 4 }
+                });
+
+                routeLayerAdded = true; // Mark that a route is added
+            })
+            .catch(error => console.error('Error fetching route:', error));
+        }
+    </script>
+
+</body>
+</html>
